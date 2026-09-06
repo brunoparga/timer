@@ -1,0 +1,33 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "timer": {
+      ".read": true,
+      ".write": true,
+
+      ".validate": "newData.hasChildren(['status', 'durationMs', 'remainingMs', 'updatedAt'])",
+
+      "status": {
+        ".validate": "newData.isString() && newData.val().matches(/^(idle|running|paused|alarming)$/)"
+      },
+      "durationMs": {
+        ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400000"
+      },
+      "remainingMs": {
+        ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400000"
+      },
+      "endsAt": {
+        ".validate": "newData.isNumber() && newData.val() > 0"
+      },
+      "updatedAt": {
+        ".validate": "newData.isNumber() && newData.val() > 0"
+      },
+
+      "$unknown": {
+        ".validate": false
+      }
+    }
+  }
+}
