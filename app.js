@@ -17,6 +17,8 @@ var pauseBtn = document.getElementById('btn-pause');
 var stopBtn = document.getElementById('btn-stop');
 var stopAlarmBtn = document.getElementById('btn-stop-alarm');
 var testAlarmBtn = document.getElementById('btn-test-alarm');
+var soundWarning = document.getElementById('sound-warning');
+var enableSoundBtn = document.getElementById('btn-enable-sound');
 
 var STATUS_TEXT = {
   idle: 'Ready',
@@ -85,6 +87,36 @@ function readDurationInputs() {
   return (mins * 60 + secs) * 1000;
 }
 
+/*
+ * The native spinner arrows on a number input fire `input`, but in some
+ * browsers they do not focus the field and do not fire `change` until it is
+ * blurred - which never happens if you only ever click the arrows. The old
+ * code listened for `change` alone, so a spun value was never committed, and
+ * the 100ms render then wrote the stored value back over it. Listening for
+ * `input` fixes both halves.
+ *
+ * `input` also fires per keystroke, so the commit is debounced to avoid a
+ * write per digit, and renders are told to leave the field alone while an
+ * edit is settling.
+ */
+var editingUntil = 0;
+var commitTimer = null;
+
+function scheduleDuration() {
+  editingUntil = Date.now() + 600;
+  if (commitTimer) clearTimeout(commitTimer);
+  commitTimer = setTimeout(function () {
+    commitTimer = null;
+    applyDuration();
+  }, 250);
+}
+
+function commitDurationNow() {
+  if (commitTimer) { clearTimeout(commitTimer); commitTimer = null; }
+  editingUntil = 0;
+  applyDuration();
+}
+
 function applyDuration() {
   var state = Sync.get();
   if (isLocked(state)) return;
@@ -106,11 +138,12 @@ function render(state) {
   readout.classList.toggle('is-alarming', state.status === 'alarming');
   statusEl.textContent = live ? (STATUS_TEXT[state.status] || state.status) : 'Connecting';
 
-  // Don't clobber what someone is actively typing into.
-  if (document.activeElement !== minutesInput) {
+  // Don't clobber what someone is actively typing or spinning.
+  var settling = Date.now() < editingUntil;
+  if (document.activeElement !== minutesInput && !settling) {
     minutesInput.value = Math.floor(state.durationMs / 60000);
   }
-  if (document.activeElement !== secondsInput) {
+  if (document.activeElement !== secondsInput && !settling) {
     secondsInput.value = Math.floor(state.durationMs / 1000) % 60;
   }
   minutesInput.disabled = !live || locked;
@@ -121,6 +154,7 @@ function render(state) {
   pauseBtn.disabled = !live || state.status !== 'running';
   stopBtn.disabled = !live || (state.status === 'idle' && left === state.durationMs);
   stopAlarmBtn.disabled = !ringing;
+  soundWarning.hidden = Alarm.isUnlocked();
 }
 
 function tick() {
@@ -147,8 +181,29 @@ testAlarmBtn.addEventListener('click', function () {
   render(Sync.get());
 });
 
-minutesInput.addEventListener('change', applyDuration);
-secondsInput.addEventListener('change', applyDuration);
+minutesInput.addEventListener('input', scheduleDuration);
+secondsInput.addEventListener('input', scheduleDuration);
+minutesInput.addEventListener('change', commitDurationNow);
+secondsInput.addEventListener('change', commitDurationNow);
+
+/*
+ * Unlock audio on the FIRST interaction of any kind, not just on Start. Someone
+ * who only ever watches a timer that a colleague started would otherwise never
+ * unlock it, and would sit through a silent alarm.
+ */
+function unlockAudio() {
+  Alarm.prime();
+  render(Sync.get());
+}
+
+document.addEventListener('pointerdown', unlockAudio, { once: true });
+document.addEventListener('keydown', unlockAudio, { once: true });
+enableSoundBtn.addEventListener('click', unlockAudio);
+
+// Returning to a backgrounded tab can leave the context suspended.
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden) Alarm.prime();
+});
 
 Sync.subscribe(render);
 setInterval(tick, 100);

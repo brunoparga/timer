@@ -3,8 +3,10 @@
  * ship and no format-support guesswork. Repeating double-beep, loops until
  * stopped.
  *
- * Browsers refuse to start audio without a user gesture, so the AudioContext is
- * created lazily on the first click and resumed defensively on every start.
+ * Browsers refuse to play audio until the page has had a user gesture. Note
+ * that CREATING an AudioContext still succeeds without one - it just comes back
+ * suspended, and anything scheduled on it is silent. So "did the context get
+ * created" is not the question; "is it actually running" is.
  */
 var BEEP_HZ = 880;
 var BEEP_LENGTH = 0.14;   // seconds of tone
@@ -47,10 +49,16 @@ function pair() {
 }
 
 export const Alarm = {
-  // Called from a real click so the context is unlocked well before the
+  // Call from any real user gesture, so the context is unlocked long before the
   // alarm needs to fire on its own.
   prime: function () {
-    return context() !== null;
+    var c = context();
+    return c !== null && c.state === 'running';
+  },
+
+  // Whether audio can actually be heard right now.
+  isUnlocked: function () {
+    return ctx !== null && ctx.state === 'running';
   },
 
   isPlaying: function () {
@@ -59,7 +67,11 @@ export const Alarm = {
 
   start: function () {
     if (loop !== null) return true;
-    if (!context()) return false;
+    var c = context();
+    // A suspended context accepts scheduled notes and plays none of them. Do
+    // not latch `loop` in that case, so the caller keeps retrying and the alarm
+    // starts the moment the page gets a gesture.
+    if (!c || c.state !== 'running') return false;
     pair();
     loop = window.setInterval(pair, CYCLE_MS);
     return true;
