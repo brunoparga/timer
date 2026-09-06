@@ -3,27 +3,48 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Goblin</title>
-<style>
-  html, body {
-    height: 100%;
-    margin: 0;
-  }
-  body {
-    background: #5d9b1f;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  img {
-    max-width: 90vw;
-    max-height: 90vh;
-    width: auto;
-    height: auto;
-  }
-</style>
+<title>Simple pomodoro timer</title>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <img src="assets/goblin.jpeg" alt="Goblin">
+  <header class="page-header">
+    <h1>Simple pomodoro timer</h1>
+    <p class="subhead"><em>Tere, ilus... kas k&auml;id siin tihti?</em></p>
+  </header>
+
+  <main class="stage">
+    <img class="goblin" src="assets/goblin.jpeg" alt="Goblin">
+
+    <section class="timer" aria-label="Timer">
+      <div class="readout" id="readout" role="timer" aria-live="off">25:00</div>
+      <p class="status" id="status">Ready</p>
+
+      <div class="duration">
+        <label>
+          <span>Minutes</span>
+          <input type="number" id="input-minutes" min="0" max="999" step="1" value="25" inputmode="numeric">
+        </label>
+        <label>
+          <span>Seconds</span>
+          <input type="number" id="input-seconds" min="0" max="59" step="1" value="0" inputmode="numeric">
+        </label>
+      </div>
+
+      <div class="controls">
+        <button type="button" id="btn-start" class="primary">Start</button>
+        <button type="button" id="btn-pause">Pause</button>
+        <button type="button" id="btn-stop">Stop</button>
+      </div>
+
+      <div class="controls alarm-controls">
+        <button type="button" id="btn-stop-alarm" class="danger" disabled>Stop alarm</button>
+        <button type="button" id="btn-test-alarm" class="ghost">Test alarm</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="sync.js"></script>
+  <script src="alarm.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

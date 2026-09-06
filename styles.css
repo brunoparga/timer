@@ -1,0 +1,161 @@
+:root {
+  --shrek: #5d9b1f;
+  --shrek-dark: #3f6d13;
+  --panel: rgba(0, 0, 0, 0.22);
+  --ink: #f4ffe8;
+  --ink-dim: #d3e9b6;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; }
+
+body {
+  min-height: 100vh;
+  padding: 2.5rem 1.5rem 3rem;
+  background: var(--shrek);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.page-header { max-width: 46rem; margin: 0 auto 2rem; }
+
+.page-header h1 {
+  margin: 0;
+  font-size: clamp(1.9rem, 5vw, 2.8rem);
+  letter-spacing: -0.02em;
+}
+
+.subhead {
+  margin: 0.4rem 0 0;
+  font-size: clamp(1rem, 2.4vw, 1.2rem);
+  color: var(--ink-dim);
+}
+
+/* Goblin left, timer to its right; stacks on narrow screens. */
+.stage {
+  max-width: 46rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 1.75rem;
+  flex-wrap: wrap;
+}
+
+.goblin {
+  width: 200px;
+  height: 200px;
+  flex: 0 0 200px;
+  object-fit: cover;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.timer {
+  flex: 1 1 18rem;
+  min-width: 16rem;
+  padding: 1.25rem 1.4rem 1.4rem;
+  background: var(--panel);
+  border-radius: 12px;
+}
+
+.readout {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: clamp(3rem, 11vw, 4.2rem);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.readout.is-alarming { animation: flash 0.8s steps(1, end) infinite; }
+
+@keyframes flash { 50% { opacity: 0.25; } }
+
+.status {
+  margin: 0.5rem 0 1.1rem;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-dim);
+}
+
+.duration {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.1rem;
+}
+
+.duration label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-dim);
+}
+
+.duration input {
+  width: 5.5rem;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 7px;
+}
+
+.duration input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.alarm-controls { margin-top: 0.7rem; }
+
+button {
+  padding: 0.55rem 1.1rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.24); }
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+button.primary {
+  color: #1d3307;
+  background: #cfe97f;
+  border-color: #cfe97f;
+}
+
+button.primary:hover:not(:disabled) { background: #dcf295; }
+
+button.danger {
+  background: #b3341f;
+  border-color: #b3341f;
+}
+
+button.danger:hover:not(:disabled) { background: #cc3d25; }
+
+button.ghost { background: transparent; }
+
+:focus-visible {
+  outline: 3px solid #f2ffcf;
+  outline-offset: 2px;
+}
