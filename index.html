@@ -9,11 +9,14 @@
 <body>
   <header class="page-header">
     <h1>Goblin Timer</h1>
-    <p class="subhead"><em>Tere, ilus... kas k&auml;id siin tihti??</em></p>
+    <p class="subhead"><em>Tere, ilus... kas k&auml;id siin tihti???</em></p>
   </header>
 
   <main class="stage">
-    <img class="goblin" src="assets/goblin.jpeg" alt="Goblin">
+    <div class="goblin-wrap">
+      <img class="goblin" src="assets/goblin.jpeg" alt="Goblin">
+      <button type="button" class="goblin-sign" id="goblin-sign">click me</button>
+    </div>
 
     <section class="timer" aria-label="Timer">
       <div class="readout" id="readout" role="timer" aria-live="off">25:00</div>

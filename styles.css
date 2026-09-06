@@ -42,13 +42,69 @@ body {
   flex-wrap: wrap;
 }
 
+.goblin-wrap {
+  position: relative;
+  flex: 0 0 200px;
+  width: 200px;
+  height: 200px;
+  line-height: 0;
+}
+
 .goblin {
   width: 200px;
   height: 200px;
-  flex: 0 0 200px;
   object-fit: cover;
   border-radius: 10px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* A little placard held up at chest height. Positioned over the lower third of
+   the portrait rather than centred, so it reads as held rather than pasted on. */
+.goblin-sign {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  transform: translateX(-50%) rotate(-5deg);
+  padding: 0.4rem 0.85rem;
+  font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: #3a2c0c;
+  background: #fdf3d7;
+  border: 2px solid #6b5320;
+  border-radius: 4px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  animation: sign-nudge 2.4s ease-in-out infinite;
+}
+
+.goblin-sign:hover {
+  background: #fffbe9;
+  transform: translateX(-50%) rotate(-5deg) scale(1.06);
+}
+
+/* Once it has been clicked it stops asking for attention. */
+.goblin-sign.is-thanked {
+  animation: none;
+  cursor: default;
+  transform: translateX(-50%) rotate(-3deg);
+}
+
+.goblin-sign.is-thanked:hover {
+  background: #fdf3d7;
+  transform: translateX(-50%) rotate(-3deg);
+}
+
+@keyframes sign-nudge {
+  0%, 88%, 100% { transform: translateX(-50%) rotate(-5deg); }
+  92%           { transform: translateX(-50%) rotate(-9deg); }
+  96%           { transform: translateX(-50%) rotate(-1deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goblin-sign { animation: none; }
 }
 
 .timer {

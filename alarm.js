@@ -49,11 +49,29 @@ function pair() {
 }
 
 export const Alarm = {
-  // Call from any real user gesture, so the context is unlocked long before the
-  // alarm needs to fire on its own.
+  /*
+   * Call from any real user gesture, so the context is unlocked long before the
+   * alarm needs to fire on its own.
+   *
+   * Safari is the strict one: resume() alone is not always enough, it wants a
+   * source actually started inside the gesture before it treats the context as
+   * unlocked. So we play one silent sample. resume() also resolves
+   * asynchronously, so the caller must not expect state to have flipped by the
+   * time this returns - poll isUnlocked() instead.
+   */
   prime: function () {
     var c = context();
-    return c !== null && c.state === 'running';
+    if (!c) return false;
+    try {
+      var buffer = c.createBuffer(1, 1, 22050);
+      var source = c.createBufferSource();
+      source.buffer = buffer;
+      source.connect(c.destination);
+      source.start(0);
+    } catch (err) {
+      /* Older implementations; resume() alone will have to do. */
+    }
+    return c.state === 'running';
   },
 
   // Whether audio can actually be heard right now.

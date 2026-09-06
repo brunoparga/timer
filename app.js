@@ -19,6 +19,11 @@ var stopAlarmBtn = document.getElementById('btn-stop-alarm');
 var testAlarmBtn = document.getElementById('btn-test-alarm');
 var soundWarning = document.getElementById('sound-warning');
 var enableSoundBtn = document.getElementById('btn-enable-sound');
+var goblinSign = document.getElementById('goblin-sign');
+
+// The sign flips on the click itself, not on the audio actually unlocking:
+// resume() resolves asynchronously, and she should get her "thanks!" instantly.
+var signClicked = false;
 
 var STATUS_TEXT = {
   idle: 'Ready',
@@ -154,7 +159,14 @@ function render(state) {
   pauseBtn.disabled = !live || state.status !== 'running';
   stopBtn.disabled = !live || (state.status === 'idle' && left === state.durationMs);
   stopAlarmBtn.disabled = !ringing;
-  soundWarning.hidden = Alarm.isUnlocked();
+
+  var thanked = signClicked || Alarm.isUnlocked();
+  goblinSign.textContent = thanked ? 'thanks!' : 'click me';
+  goblinSign.classList.toggle('is-thanked', thanked);
+
+  // The written explanation is now only a fallback: it appears if she took the
+  // hint and the browser still refused, rather than competing with the sign.
+  soundWarning.hidden = !signClicked || Alarm.isUnlocked();
 }
 
 function tick() {
@@ -196,9 +208,18 @@ function unlockAudio() {
   render(Sync.get());
 }
 
+// pointerdown covers mouse and touch on modern browsers; click and touchstart
+// are belt and braces for older Safari.
 document.addEventListener('pointerdown', unlockAudio, { once: true });
+document.addEventListener('touchstart', unlockAudio, { once: true });
+document.addEventListener('click', unlockAudio, { once: true });
 document.addEventListener('keydown', unlockAudio, { once: true });
 enableSoundBtn.addEventListener('click', unlockAudio);
+
+goblinSign.addEventListener('click', function () {
+  signClicked = true;
+  unlockAudio();
+});
 
 // Returning to a backgrounded tab can leave the context suspended.
 document.addEventListener('visibilitychange', function () {
