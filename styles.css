@@ -63,7 +63,7 @@ body {
 .goblin-sign {
   position: absolute;
   left: 50%;
-  top: 62%;
+  top: 74%;
   transform: translateX(-50%) rotate(-5deg);
   padding: 0.4rem 0.85rem;
   font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
@@ -216,26 +216,3 @@ button.ghost { background: transparent; }
   outline-offset: 2px;
 }
 
-.sound-warning {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem;
-  margin: 0.9rem 0 0;
-  padding: 0.65rem 0.8rem;
-  font-size: 0.85rem;
-  line-height: 1.35;
-  color: #2a1a00;
-  background: #ffd76e;
-  border-radius: 8px;
-}
-
-.sound-warning button {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.85rem;
-  color: #2a1a00;
-  background: rgba(0, 0, 0, 0.12);
-  border-color: rgba(0, 0, 0, 0.35);
-}
-
-.sound-warning button:hover:not(:disabled) { background: rgba(0, 0, 0, 0.2); }

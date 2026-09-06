@@ -17,12 +17,10 @@ var pauseBtn = document.getElementById('btn-pause');
 var stopBtn = document.getElementById('btn-stop');
 var stopAlarmBtn = document.getElementById('btn-stop-alarm');
 var testAlarmBtn = document.getElementById('btn-test-alarm');
-var soundWarning = document.getElementById('sound-warning');
-var enableSoundBtn = document.getElementById('btn-enable-sound');
 var goblinSign = document.getElementById('goblin-sign');
 
-// The sign flips on the click itself, not on the audio actually unlocking:
-// resume() resolves asynchronously, and she should get her "thanks!" instantly.
+// The sign flips only when the sign itself is clicked - not when audio happens
+// to unlock some other way, and not on the first click anywhere on the page.
 var signClicked = false;
 
 var STATUS_TEXT = {
@@ -160,13 +158,8 @@ function render(state) {
   stopBtn.disabled = !live || (state.status === 'idle' && left === state.durationMs);
   stopAlarmBtn.disabled = !ringing;
 
-  var thanked = signClicked || Alarm.isUnlocked();
-  goblinSign.textContent = thanked ? 'thanks!' : 'click me';
-  goblinSign.classList.toggle('is-thanked', thanked);
-
-  // The written explanation is now only a fallback: it appears if she took the
-  // hint and the browser still refused, rather than competing with the sign.
-  soundWarning.hidden = !signClicked || Alarm.isUnlocked();
+  goblinSign.textContent = signClicked ? 'thanks!' : 'click me';
+  goblinSign.classList.toggle('is-thanked', signClicked);
 }
 
 function tick() {
@@ -204,17 +197,20 @@ secondsInput.addEventListener('change', commitDurationNow);
  * unlock it, and would sit through a silent alarm.
  */
 function unlockAudio() {
+  if (Alarm.isUnlocked()) return;
   Alarm.prime();
   render(Sync.get());
 }
 
-// pointerdown covers mouse and touch on modern browsers; click and touchstart
-// are belt and braces for older Safari.
-document.addEventListener('pointerdown', unlockAudio, { once: true });
-document.addEventListener('touchstart', unlockAudio, { once: true });
-document.addEventListener('click', unlockAudio, { once: true });
-document.addEventListener('keydown', unlockAudio, { once: true });
-enableSoundBtn.addEventListener('click', unlockAudio);
+/*
+ * Not { once: true }. A single attempt that Safari refuses used to leave the
+ * page permanently silent with nothing retrying. Every interaction now gets
+ * another go, and Alarm.prime() returns early once it has actually worked.
+ */
+document.addEventListener('pointerdown', unlockAudio);
+document.addEventListener('touchstart', unlockAudio);
+document.addEventListener('click', unlockAudio);
+document.addEventListener('keydown', unlockAudio);
 
 goblinSign.addEventListener('click', function () {
   signClicked = true;

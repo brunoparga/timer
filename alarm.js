@@ -1,104 +1,149 @@
 /*
- * Alarm noise, synthesised with the Web Audio API so there is no audio asset to
- * ship and no format-support guesswork. Repeating double-beep, loops until
- * stopped.
+ * Alarm noise.
  *
- * Browsers refuse to play audio until the page has had a user gesture. Note
- * that CREATING an AudioContext still succeeds without one - it just comes back
- * suspended, and anything scheduled on it is silent. So "did the context get
- * created" is not the question; "is it actually running" is.
+ * This used to synthesise beeps through the Web Audio API. That works on
+ * Chrome and Firefox but is unreliable on Safari, which suspends AudioContexts
+ * aggressively - in particular for background tabs, which is exactly when a
+ * pomodoro alarm needs to fire. An <audio> element behaves far better: once it
+ * has been played inside a user gesture, Safari lets it play again later on its
+ * own, including while the tab is in the background.
+ *
+ * There is still no way to make sound before the page has had a gesture; that
+ * is browser policy. What we can do is make the unlock happen on the first
+ * interaction of any kind, and keep retrying rather than giving up after one
+ * attempt.
+ *
+ * The sound itself is generated as a WAV data URI at load, so there is no
+ * audio asset to ship and nothing to 404.
  */
-var BEEP_HZ = 880;
-var BEEP_LENGTH = 0.14;   // seconds of tone
-var BEEP_GAP = 0.22;      // start-to-start spacing within a pair
-var CYCLE_MS = 1000;      // spacing between pairs
+const SAMPLE_RATE = 22050;
+const CYCLE_SECONDS = 1;      // one double-beep per second, looped
+const BEEP_HZ = 880;
+const BEEP_SECONDS = 0.14;
+const BEEP_GAP = 0.22;        // start-to-start within a pair
 
-var ctx = null;
-var loop = null;
-
-function context() {
-  if (!ctx) {
-    var Ctor = window.AudioContext || window.webkitAudioContext;
-    if (!Ctor) return null;
-    ctx = new Ctor();
+function addBeep(pcm, atSeconds) {
+  const start = Math.floor(atSeconds * SAMPLE_RATE);
+  const length = Math.floor(BEEP_SECONDS * SAMPLE_RATE);
+  const fade = Math.floor(0.008 * SAMPLE_RATE);
+  for (let i = 0; i < length; i++) {
+    const t = i / SAMPLE_RATE;
+    // Fade the edges, otherwise the square wave clicks audibly.
+    let env = 1;
+    if (i < fade) env = i / fade;
+    else if (i > length - fade) env = Math.max(0, (length - i) / fade);
+    const square = Math.sin(2 * Math.PI * BEEP_HZ * t) >= 0 ? 1 : -1;
+    pcm[start + i] = Math.round(square * env * 0.45 * 32767);
   }
-  if (ctx.state === 'suspended') ctx.resume();
-  return ctx;
 }
 
-function beep(at) {
-  var osc = ctx.createOscillator();
-  var gain = ctx.createGain();
-  osc.type = 'square';
-  osc.frequency.setValueAtTime(BEEP_HZ, at);
-  // Short ramps top and tail, otherwise the square wave clicks audibly.
-  gain.gain.setValueAtTime(0, at);
-  gain.gain.linearRampToValueAtTime(0.22, at + 0.01);
-  gain.gain.setValueAtTime(0.22, at + BEEP_LENGTH - 0.02);
-  gain.gain.linearRampToValueAtTime(0, at + BEEP_LENGTH);
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.start(at);
-  osc.stop(at + BEEP_LENGTH + 0.02);
+function encodeWav(pcm) {
+  const bytes = new Uint8Array(44 + pcm.length * 2);
+  const view = new DataView(bytes.buffer);
+  const str = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  str(0, 'RIFF');
+  view.setUint32(4, 36 + pcm.length * 2, true);
+  str(8, 'WAVE');
+  str(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);                    // PCM
+  view.setUint16(22, 1, true);                    // mono
+  view.setUint32(24, SAMPLE_RATE, true);
+  view.setUint32(28, SAMPLE_RATE * 2, true);      // byte rate
+  view.setUint16(32, 2, true);                    // block align
+  view.setUint16(34, 16, true);                   // bits per sample
+  str(36, 'data');
+  view.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) view.setInt16(44 + i * 2, pcm[i], true);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return 'data:audio/wav;base64,' + btoa(binary);
 }
 
-function pair() {
-  var now = ctx.currentTime;
-  beep(now);
-  beep(now + BEEP_GAP);
+function buildAlarmSound() {
+  const pcm = new Int16Array(Math.floor(SAMPLE_RATE * CYCLE_SECONDS));
+  addBeep(pcm, 0);
+  addBeep(pcm, BEEP_GAP);
+  return encodeWav(pcm);
 }
+
+const audio = new Audio(buildAlarmSound());
+audio.loop = true;
+audio.preload = 'auto';
+
+let unlocked = false;
+let priming = false;
+let playing = false;
 
 export const Alarm = {
   /*
-   * Call from any real user gesture, so the context is unlocked long before the
-   * alarm needs to fire on its own.
+   * Call from any real user gesture. Playing the element once inside the
+   * gesture is what earns permission to play it later unprompted; we do it at
+   * volume 0 and stop immediately so the unlock itself is inaudible.
    *
-   * Safari is the strict one: resume() alone is not always enough, it wants a
-   * source actually started inside the gesture before it treats the context as
-   * unlocked. So we play one silent sample. resume() also resolves
-   * asynchronously, so the caller must not expect state to have flipped by the
-   * time this returns - poll isUnlocked() instead.
+   * play() resolves asynchronously, so `unlocked` will not be true by the time
+   * this returns. Poll isUnlocked().
    */
-  prime: function () {
-    var c = context();
-    if (!c) return false;
+  prime() {
+    if (unlocked || priming || playing) return unlocked;
+    priming = true;
+    const restore = audio.volume;
+    audio.volume = 0;
+    let result;
     try {
-      var buffer = c.createBuffer(1, 1, 22050);
-      var source = c.createBufferSource();
-      source.buffer = buffer;
-      source.connect(c.destination);
-      source.start(0);
+      result = audio.play();
     } catch (err) {
-      /* Older implementations; resume() alone will have to do. */
+      priming = false;
+      audio.volume = restore;
+      return false;
     }
-    return c.state === 'running';
+    if (result && typeof result.then === 'function') {
+      result.then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.volume = restore;
+        unlocked = true;
+        priming = false;
+      }).catch(() => {
+        audio.volume = restore;
+        priming = false;   // stay locked, and let the next gesture try again
+      });
+    } else {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.volume = restore;
+      unlocked = true;
+      priming = false;
+    }
+    return unlocked;
   },
 
-  // Whether audio can actually be heard right now.
-  isUnlocked: function () {
-    return ctx !== null && ctx.state === 'running';
+  isUnlocked() {
+    return unlocked;
   },
 
-  isPlaying: function () {
-    return loop !== null;
+  isPlaying() {
+    return playing;
   },
 
-  start: function () {
-    if (loop !== null) return true;
-    var c = context();
-    // A suspended context accepts scheduled notes and plays none of them. Do
-    // not latch `loop` in that case, so the caller keeps retrying and the alarm
-    // starts the moment the page gets a gesture.
-    if (!c || c.state !== 'running') return false;
-    pair();
-    loop = window.setInterval(pair, CYCLE_MS);
+  start() {
+    if (playing) return true;
+    // Don't latch as playing if we were never unlocked - the caller retries,
+    // so the alarm starts the moment the page finally gets a gesture.
+    if (!unlocked) return false;
+    audio.currentTime = 0;
+    playing = true;
+    const result = audio.play();
+    if (result && typeof result.catch === 'function') {
+      result.catch(() => { playing = false; unlocked = false; });
+    }
     return true;
   },
 
-  stop: function () {
-    if (loop === null) return;
-    window.clearInterval(loop);
-    loop = null;
+  stop() {
+    if (!playing) return;
+    audio.pause();
+    audio.currentTime = 0;
+    playing = false;
   }
 };
-
