@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Simple pomodoro timer</title>
+<title>Goblin Timer</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="page-header">
-    <h1>Simple pomodoro timer</h1>
+    <h1>Goblin Timer</h1>
     <p class="subhead"><em>Tere, ilus... kas k&auml;id siin tihti?</em></p>
   </header>
 
@@ -43,8 +43,8 @@
     </section>
   </main>
 
-  <script src="sync.js"></script>
-  <script src="alarm.js"></script>
-  <script src="app.js"></script>
+  <!-- app.js pulls in sync.js and alarm.js via ES module imports, so load order
+       is guaranteed by the dependency graph rather than by tag order. -->
+  <script type="module" src="app.js"></script>
 </body>
 </html>

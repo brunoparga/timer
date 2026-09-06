@@ -1,74 +1,129 @@
 /*
- * Shared-state layer.
+ * Shared-state layer, backed by Firebase Realtime Database.
  *
- * This is the ONLY file that needs to change to make the timer shared across
- * everyone connected to the site. It exposes three things:
+ * Interface (unchanged from the local version, so app.js is untouched):
  *
- *   Sync.get()            -> current state object
- *   Sync.set(state)       -> publish a new state
- *   Sync.subscribe(fn)    -> fn(state) on every change, including the first
+ *   Sync.get()          -> current state object
+ *   Sync.set(patch)     -> publish a new state
+ *   Sync.subscribe(fn)  -> fn(state) on every change, including immediately
+ *   Sync.isReady()      -> has the first snapshot arrived?
  *
- * The state is deliberately timestamp-based rather than tick-based: when the
- * timer runs, we store the wall-clock instant it ends (`endsAt`) rather than a
- * countdown that has to be decremented. Every client derives the remaining time
- * from that instant, so N clients agree without exchanging ticks. That is what
- * makes the Firebase swap a drop-in.
+ * State is timestamp-based: while running we store `endsAt`, the wall-clock
+ * instant the timer expires, rather than a decrementing count. Every client
+ * derives its own remaining time from that instant, so all clients agree
+ * without exchanging ticks and without needing synchronised clocks beyond
+ * roughly-correct system time.
  *
- * Current implementation: in-memory, plus BroadcastChannel so that multiple
- * TABS OF THE SAME BROWSER stay in step. That is a local convenience and a way
- * to exercise the multi-client paths; it is NOT cross-visitor sync. Two
- * different people still get two independent timers until Firebase is wired in.
+ * The shape written here must satisfy database.rules.json exactly: the four
+ * required numeric/string fields, an optional numeric endsAt, and no other
+ * keys. Anything else is rejected by the server with a permission error.
  */
-(function (global) {
-  'use strict';
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+import {
+  getDatabase, ref, onValue, set as dbSet
+} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js";
+import { firebaseConfig } from './firebase-config.js';
 
-  var DEFAULT_DURATION_MS = 25 * 60 * 1000;
+const DEFAULT_DURATION_MS = 25 * 60 * 1000;
 
-  var state = {
-    status: 'idle',                    // idle | running | paused | alarming
-    durationMs: DEFAULT_DURATION_MS,   // configured length
-    remainingMs: DEFAULT_DURATION_MS,  // authoritative when not running
-    endsAt: null,                      // epoch ms; authoritative when running
-    updatedAt: Date.now()
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const timerRef = ref(db, 'timer');
+
+let state = {
+  status: 'idle',
+  durationMs: DEFAULT_DURATION_MS,
+  remainingMs: DEFAULT_DURATION_MS,
+  endsAt: null,
+  updatedAt: 0
+};
+
+let listeners = [];
+let ready = false;
+let seeded = false;
+
+function emit() {
+  for (const fn of listeners) fn(state);
+}
+
+/*
+ * Firebase omits keys whose value is null, so `endsAt` simply won't be present
+ * when the timer isn't running. Normalise it back to an explicit null so the
+ * rest of the app never has to distinguish "absent" from "null".
+ */
+function normalise(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  if (typeof raw.status !== 'string' || typeof raw.durationMs !== 'number') return null;
+  return {
+    status: raw.status,
+    durationMs: raw.durationMs,
+    remainingMs: typeof raw.remainingMs === 'number' ? raw.remainingMs : 0,
+    endsAt: typeof raw.endsAt === 'number' ? raw.endsAt : null,
+    updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : 0
   };
+}
 
-  var listeners = [];
-  var channel = null;
+// Strip nulls before writing: the rules reject unexpected keys, and a null
+// endsAt would otherwise be sent as an explicit delete of a key that must
+// either be a positive number or absent.
+function payload(s) {
+  const out = {
+    status: s.status,
+    durationMs: s.durationMs,
+    remainingMs: s.remainingMs,
+    updatedAt: s.updatedAt
+  };
+  if (typeof s.endsAt === 'number' && s.endsAt > 0) out.endsAt = s.endsAt;
+  return out;
+}
 
-  if ('BroadcastChannel' in global) {
-    channel = new BroadcastChannel('goblin-timer');
-    channel.onmessage = function (event) {
-      var incoming = event.data;
-      // Last write wins. Ignore anything we have already superseded locally.
-      if (!incoming || incoming.updatedAt < state.updatedAt) return;
-      state = incoming;
-      emit();
-    };
-  }
+onValue(timerRef, (snapshot) => {
+  const incoming = normalise(snapshot.val());
+  ready = true;
 
-  function emit() {
-    for (var i = 0; i < listeners.length; i++) listeners[i](state);
-  }
-
-  var Sync = {
-    DEFAULT_DURATION_MS: DEFAULT_DURATION_MS,
-
-    get: function () {
-      return state;
-    },
-
-    set: function (next) {
-      state = Object.assign({}, state, next, { updatedAt: Date.now() });
-      if (channel) channel.postMessage(state);
-      emit();
-      return state;
-    },
-
-    subscribe: function (fn) {
-      listeners.push(fn);
-      fn(state);
+  if (!incoming) {
+    // Node is empty or was deleted. Seed it once with the defaults rather than
+    // looping if the write is rejected.
+    if (!seeded) {
+      seeded = true;
+      Sync.set({ status: 'idle', remainingMs: state.durationMs, endsAt: null });
     }
-  };
+    emit();
+    return;
+  }
 
-  global.Sync = Sync;
-})(window);
+  seeded = true;
+  state = incoming;
+  emit();
+}, (error) => {
+  // Most likely cause: rules not published, or the node is unreadable.
+  console.error('[sync] cannot read /timer —', error.message);
+  ready = true;
+  emit();
+});
+
+export const Sync = {
+  DEFAULT_DURATION_MS,
+
+  get() {
+    return state;
+  },
+
+  isReady() {
+    return ready;
+  },
+
+  set(next) {
+    state = { ...state, ...next, updatedAt: Date.now() };
+    emit();  // optimistic: don't wait for the round trip to redraw
+    dbSet(timerRef, payload(state)).catch((error) => {
+      console.error('[sync] write rejected —', error.message);
+    });
+    return state;
+  },
+
+  subscribe(fn) {
+    listeners.push(fn);
+    fn(state);
+  }
+};
